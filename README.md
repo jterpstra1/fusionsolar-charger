@@ -49,7 +49,8 @@ With the default prefix `scharger`:
 | statistic `fusionsolar:scharger_energy` | hourly long-term statistic of the lifetime counter, including the backfilled history |
 
 These entities are created through the Supervisor API, so they have no unique id and can't be
-edited in the UI. They come back within one poll after a Home Assistant restart.
+edited in the UI. Home Assistant forgets them on restart; the add-on notices within 15 seconds
+and re-publishes the last values.
 
 ### Dashboard example
 

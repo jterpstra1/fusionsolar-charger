@@ -1,5 +1,5 @@
 name: FusionSolar Charger
-version: "1.0.1"
+version: "1.0.2"
 slug: fusionsolar_charger
 url: https://github.com/jterpstra1/fusionsolar-charger
 description: Huawei SCharger data from FusionSolar, with monthly kWh and full charging history

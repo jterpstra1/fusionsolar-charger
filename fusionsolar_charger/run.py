@@ -48,10 +48,34 @@ def save(path, data):
     os.replace(path + ".tmp", path)
 
 
+PUBLISHED = {}  # entity_id -> last payload, re-sent when HA restarts and forgets the states
+
+
 def publish(entity_id, state, **attrs):
-    r = requests.post(f"{CORE}/states/{entity_id}", headers=HEADERS,
-                      json={"state": state, "attributes": attrs}, timeout=15)
+    payload = {"state": state, "attributes": attrs}
+    r = requests.post(f"{CORE}/states/{entity_id}", headers=HEADERS, json=payload, timeout=15)
     r.raise_for_status()
+    PUBLISHED[entity_id] = payload
+
+
+def wait_and_watch(seconds: int, check_every: int = 15):
+    """Sleep until the next poll; meanwhile re-publish our states as soon as HA core has
+    restarted (states set through the API don't survive a restart)."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        time.sleep(min(check_every, max(deadline - time.monotonic(), 0)))
+        if not PUBLISHED:
+            continue
+        probe = next(iter(PUBLISHED))
+        try:
+            r = requests.get(f"{CORE}/states/{probe}", headers=HEADERS, timeout=10)
+            if r.status_code == 404:
+                for entity_id, payload in list(PUBLISHED.items()):
+                    requests.post(f"{CORE}/states/{entity_id}", headers=HEADERS,
+                                  json=payload, timeout=15).raise_for_status()
+                print("Home Assistant restarted; re-published last known states.")
+        except requests.RequestException:
+            pass  # core is still starting; try again next round
 
 
 def ha_timezone() -> ZoneInfo:
@@ -227,7 +251,7 @@ def main():
         except Exception:
             traceback.print_exc()
             reader = None  # force a fresh login next round
-        time.sleep(interval)
+        wait_and_watch(interval)
 
 
 if __name__ == "__main__":
