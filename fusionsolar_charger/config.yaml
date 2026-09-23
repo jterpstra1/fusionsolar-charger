@@ -1,0 +1,24 @@
+name: FusionSolar Charger
+version: "0.2.0"
+slug: fusionsolar_charger
+url: https://github.com/jterpstra1/fusionsolar-charger
+description: Polls the Huawei SCharger via the FusionSolar portal and publishes sensors to Home Assistant
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+options:
+  username: ""
+  password: ""
+  subdomain: uni002eu5
+  interval: 300
+  backfill_from: "2023-12-01"
+schema:
+  username: str
+  password: password
+  subdomain: str
+  interval: int(60,3600)
+  backfill_from: str
