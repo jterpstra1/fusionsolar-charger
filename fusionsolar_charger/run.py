@@ -66,15 +66,22 @@ def row_start(ts: int) -> int:
     return (ts - 1) // 3600 * 3600
 
 
+STATS_VERSION = 2  # bump to force a full re-import when the row format changes
+
+
 def import_statistics(hourly: dict, only_from: int = 0):
-    """Write hourly rows (start epoch -> kWh) >= only_from to HA's long-term statistics."""
-    rows, last = [], 0.0
+    """Write hourly rows (start epoch -> kWh) >= only_from to HA's long-term statistics.
+
+    state is the lifetime counter; sum counts from the first reading, so the energy charged
+    before the history starts doesn't land in the first month."""
+    rows, last, base = [], 0.0, None
     for start in sorted(int(k) for k in hourly):
         value = max(hourly[str(start)], last)  # lifetime counter never decreases
         last = value
+        base = value if base is None else base
         if start >= only_from:
             rows.append({"start": datetime.fromtimestamp(start, timezone.utc).isoformat(),
-                         "state": value, "sum": value})
+                         "state": value, "sum": round(value - base, 3)})
     if not rows:
         return
     ws = websocket.create_connection("ws://supervisor/core/websocket", timeout=30)
@@ -117,14 +124,9 @@ def backfill(reader, hourly: dict, state: dict, start_day: date, tz: ZoneInfo):
             print(f"  ...{day} ({len(hourly)} hourly readings)")
         day += timedelta(days=1)
         time.sleep(0.3)
-    if state.get("imported"):
+    if state.get("stats_version") == STATS_VERSION:  # otherwise main() imports everything
         first = datetime(first_day.year, first_day.month, first_day.day, tzinfo=tz)
         import_statistics(hourly, only_from=int(first.timestamp()) - 3600)
-    else:
-        import_statistics(hourly)
-        state["imported"] = True
-        save(STATE, state)
-        print(f"Backfill imported into HA statistics ({len(hourly)} hourly readings).")
 
 
 def find_history_start(reader, tz: ZoneInfo, years_back: int = 6) -> date:
@@ -207,6 +209,11 @@ def main():
                         state["backfill_start"] = str(start)
                         save(STATE, state)
                     backfill(reader, hourly, state, date.fromisoformat(state["backfill_start"]), tz)
+            if hourly and state.get("stats_version") != STATS_VERSION:
+                import_statistics(hourly)
+                state["stats_version"] = STATS_VERSION
+                save(STATE, state)
+                print(f"Imported {len(hourly)} hourly readings into HA statistics.")
             snap = reader.snapshot()
             push_live(snap)
             total = snap["total_energy_kwh"]
