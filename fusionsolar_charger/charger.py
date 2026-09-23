@@ -8,7 +8,8 @@ Credentials:
   FUSIONSOLAR_USER      login email/username
   FUSIONSOLAR_PASSWORD  password (or store it in the macOS keychain:
                         security add-generic-password -s fusionsolar -a <user> -w)
-  FUSIONSOLAR_SUBDOMAIN default uni002eu5
+  FUSIONSOLAR_SUBDOMAIN portal subdomain, e.g. uni002eu5 (see the URL after logging in)
+  FUSIONSOLAR_CHARGER   optional charger serial number, if the account has several
 
 Usage:
   charger.py                      print one JSON snapshot
@@ -42,9 +43,10 @@ def get_password(user: str) -> str:
 
 
 class ChargerReader:
-    def __init__(self, user: str, password: str, subdomain: str):
+    def __init__(self, user: str, password: str, subdomain: str, charger_sn: str = ""):
         self.client = FusionSolarClient(user, password, huawei_subdomain=subdomain)
         self.base = f"https://{subdomain}.fusionsolar.huawei.com"
+        self.charger_sn = charger_sn.strip().upper()
         self.charger_id, self.connector_id = self._discover()
 
     def _post(self, path: str, body) -> dict:
@@ -72,16 +74,23 @@ class ChargerReader:
         return nodes
 
     def _discover(self):
+        """Find the charger (first one, or the one whose name/SN matches charger_sn) and its connector."""
+        found = []
         for plant_dn in self.client.get_plant_ids():
-            charger = next((n for n in self._tree(plant_dn) if n.get("mocId") == MOC_CHARGER), None)
-            if charger:
+            chargers = [n for n in self._tree(plant_dn) if n.get("mocId") == MOC_CHARGER]
+            found += [n.get("nodeName") for n in chargers]
+            if self.charger_sn:
+                chargers = [n for n in chargers if self.charger_sn in (n.get("nodeName") or "").upper()]
+            for charger in chargers:
+                self.charger_sn = self.charger_sn or charger.get("nodeName", "")
                 children = self._tree(charger["elementDn"], [MOC_CONNECTOR])
                 connector = next((n for n in children if n.get("mocId") == MOC_CONNECTOR), None)
                 if connector is None:
                     raise RuntimeError(f"No charging connector under {charger['elementDn']}: "
                                        f"{[(n.get('nodeName'), n.get('mocId')) for n in children]}")
                 return int(charger["elementId"]), int(connector["elementId"])
-        sys.exit("No charger found on this account.")
+        raise SystemExit(f"Charger {self.charger_sn!r} not found; chargers on this account: {found}"
+                         if self.charger_sn else "No charger found on this account.")
 
     def energy_history(self, day_ms: int) -> list:
         """Lifetime-energy readings (epoch s, kWh) for the day containing day_ms.
@@ -133,7 +142,8 @@ def main():
     args = ap.parse_args()
 
     user = os.environ.get("FUSIONSOLAR_USER") or sys.exit("Set FUSIONSOLAR_USER.")
-    reader = ChargerReader(user, get_password(user), os.environ.get("FUSIONSOLAR_SUBDOMAIN", "uni002eu5"))
+    reader = ChargerReader(user, get_password(user), os.environ.get("FUSIONSOLAR_SUBDOMAIN", "region01eu5"),
+                           os.environ.get("FUSIONSOLAR_CHARGER", ""))
 
     while True:
         line = json.dumps(reader.snapshot())
