@@ -1,0 +1,11 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "timezone": "Europe/Brussels",
+  "dependencyDashboard": true,
+  "prBodyNotes": [
+    "**Home Assistant only offers an update when the add-on version changes.** Bump `version` in `fusionsolar_charger/config.yaml` before releasing this."
+  ]
+}
