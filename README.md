@@ -43,6 +43,7 @@ With the default prefix `scharger`:
 |---|---|
 | `sensor.scharger_energy_this_month` | kWh charged since the 1st of this month |
 | `sensor.scharger_energy_last_month` | kWh charged last month (attributes: `period`, meter reading at start and end) |
+| `sensor.scharger_energy_YYYY_MM` | one per month since the history starts, e.g. `sensor.scharger_energy_2026_09` (attributes: `period`, `meter_start_kwh`, `meter_end_kwh`, `complete`) |
 | `sensor.scharger_total_energy` | lifetime energy counter (kWh) |
 | `sensor.scharger_power` | charging power (kW) |
 | `sensor.scharger_status` | working status; current and voltage per phase, lock, relay, temperature and WiFi signal as attributes |

@@ -194,6 +194,28 @@ def month_sensors(hourly: dict, total_now: float, tz: ZoneInfo):
                 meter_start_kwh=c_last, meter_end_kwh=c_this, **common)
 
 
+def per_month_sensors(hourly: dict, total_now: float, tz: ZoneInfo):
+    """One sensor per calendar month since the history starts: sensor.<prefix>_energy_YYYY_MM."""
+    if not hourly:
+        return
+    first_ts = min(int(k) for k in hourly)
+    first_reading = hourly[str(first_ts)]
+    now = datetime.now(tz)
+    month = datetime.fromtimestamp(first_ts, tz).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    while month <= now:
+        nxt = (month + timedelta(days=32)).replace(day=1)
+        complete = nxt <= now
+        start = counter_at(hourly, int(month.timestamp()))
+        start = first_reading if start is None else start
+        end = counter_at(hourly, int(nxt.timestamp())) if complete else total_now
+        if end is not None:
+            publish(f"sensor.{PREFIX}_energy_{month:%Y_%m}", round(end - start, 3),
+                    friendly_name=f"Energy charged {month:%Y-%m}", unit_of_measurement="kWh",
+                    device_class="energy", icon="mdi:calendar-month", period=f"{month:%Y-%m}",
+                    meter_start_kwh=start, meter_end_kwh=end, complete=complete)
+        month = nxt
+
+
 def push_live(snap):
     if snap["total_energy_kwh"] is not None:
         publish(f"sensor.{PREFIX}_total_energy", snap["total_energy_kwh"],
@@ -247,6 +269,7 @@ def main():
                 save(STORE, hourly)
                 import_statistics(hourly, only_from=start - 3600)
                 month_sensors(hourly, total, tz)
+                per_month_sensors(hourly, total, tz)
             print(json.dumps(snap))
         except Exception:
             traceback.print_exc()
